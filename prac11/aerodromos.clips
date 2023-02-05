@@ -1,0 +1,82 @@
+(deffunction horas (?distancia ?velocidad)
+    (div ?distancia ?velocidad)
+)
+
+(deffunction minutos (?distancia ?velocidad)
+    (div (* (mod ?distancia ?velocidad) 60) ?velocidad)
+)
+
+(deftemplate Aeronaves
+    (slot idaeronave)
+    (slot compania)
+    (slot origen)
+    (slot destino)
+    (slot velocidad)
+    (slot accion (allowed-values Ninguna Despegue Aterrizaje Emergencia Rumbo))
+    (slot estado (allowed-values enTierra Ascenso Crucero Descenso))
+)
+
+(deftemplate Aerodromos
+    (slot idaerodromo)
+    (slot ciudad)
+    (slot radar (allowed-values ON OFF))
+    (slot visibilidad (type INTEGER))
+    (slot viento (type INTEGER))
+)
+
+(deftemplate Piloto
+    (slot idaeronave)
+    (slot estado (allowed-values OK SOS Ejecutando Stand-by) (default Stand-by))
+)
+
+(deftemplate Vuelos
+    (slot idaerodromo1)
+    (slot idaerodromo2)
+    (slot distancia)
+    (slot vdespegue (default 240) (type INTEGER))
+    (slot vcrucero (default 700))
+)
+
+(defrule Despegar
+    ?aeronave <- (Aeronaves (idaeronave ?idaeronave) (compania ?compania)(origen ?origen) (destino ?destino) (accion ?accion) (velocidad ?velocidad) (estado enTierra))
+    (Aerodromos (idaerodromo ?origen) (ciudad ?ciudadorigen) (radar ON) (visibilidad ?visibilidad) (viento ?viento))
+    (Aerodromos (idaerodromo ?destino) (ciudad ?ciudaddestino))
+    ?p <- (Piloto (idaeronave ?idaeronave) (estado OK))
+    (Vuelos (idaerodromo1 ?origen) (idaerodromo2 ?destino) (vdespegue ?vdespegue))
+    (test (> ?visibilidad 5))
+    (test (< ?viento 75))
+    =>
+    (modify ?p (estado Ejecutando))
+    (modify ?aeronave (estado Ascenso) (velocidad ?vdespegue) (accion Ninguna))
+    (println "La aeronave " ?idaeronave " de la compañía " ?compania " va a realizar la acción despegue desde el aeródromo " ?origen " de " ?ciudadorigen " con destino " ?ciudaddestino)
+)
+
+(defrule Excepcion
+    (Piloto (idaeronave ?idaeronave) (estado ?estado))
+    (test (neq ?estado OK))
+    ?a <- (Aeronaves (idaeronave ?idaeronave) (compania ?compania) (origen ?origen) (accion Despegue))
+    (Aerodromos (idaerodromo ?origen))
+    (Vuelos (idaerodromo1 ?origen) (idaerodromo2 ?destino))
+    =>
+    (modify ?a (accion Emergencia))
+    (println "El piloto de la aeronave " ?idaeronave " de la compañía " ?compania " no se encuentra disponible para iniciar el despegue desde el aeródromo " ?origen " con destino " ?destino)
+)
+
+(defrule Crucero
+    ?aeronave <- (Aeronaves (idaeronave ?idaeronave) (velocidad ?v) (accion Ninguna) (estado Ascenso))
+    ?piloto <- (Piloto (idaeronave ?idaeronave) (estado ?estado))
+    (Vuelos (distancia ?distancia) (vdespegue ?vdespegue) (vcrucero ?vcrucero))
+    =>
+    (modify ?aeronave (estado Crucero) (velocidad ?vcrucero))
+    (modify ?piloto (estado Stand-by))
+    
+    (println "El despegue ha sido correcto y se estiman " (horas ?distancia ?vcrucero) " horas y " (minutos ?distancia ?vcrucero) " minutos de vuelo ")
+)
+
+(deffacts inicio
+    (Aeronaves (idaeronave ID007) (compania IBERIA)(origen XRY) (destino MAD) (velocidad 0)(accion Despegue))
+    (Aerodromos (idaerodromo XRY) (ciudad Jerez) (radar ON) (visibilidad 10) (viento 0))
+    (Aerodromos (idaerodromo MAD) (ciudad Madrid))
+    (Piloto (idaeronave ID007) (estado SOS))
+    (Vuelos (idaerodromo1 XRY) (idaerodromo2 MAD) (distancia 880) (vcrucero 800))
+)
